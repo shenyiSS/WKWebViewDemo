@@ -47,10 +47,20 @@
 }
 
 - (void)configNavi {
+    //rightItems
     UIBarButtonItem *backItem = [[UIBarButtonItem alloc] initWithTitle:@"后退" style:UIBarButtonItemStylePlain target:self action:@selector(backAction)];
     UIBarButtonItem *forwardItem = [[UIBarButtonItem alloc] initWithTitle:@"向前" style:UIBarButtonItemStylePlain target:self action:@selector(forwardAction)];
     UIBarButtonItem *refreshItem = [[UIBarButtonItem alloc] initWithTitle:@"刷新" style:UIBarButtonItemStylePlain target:self action:@selector(refreshAction)];
+    
     self.navigationItem.rightBarButtonItems = @[backItem, forwardItem, refreshItem];
+    
+    //leftItems
+    UIButton *backButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [backButton setTitle:@"返回" forState:UIControlStateNormal];
+    [backButton addTarget:self action:@selector(backNaviItemAction) forControlEvents:UIControlEventTouchUpInside];
+    UIBarButtonItem *backButtonItem = [[UIBarButtonItem alloc] initWithCustomView:backButton];
+    
+    self.navigationItem.leftBarButtonItems = @[backButtonItem];
 }
 
 - (void)configRefreshHeader {
@@ -63,29 +73,65 @@
     [self.view addSubview:self.progressView];
 }
 
+- (void)addCloseButtonItem {
+    UIButton *closeButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [closeButton setTitle:@"关闭" forState:UIControlStateNormal];
+    [closeButton addTarget:self action:@selector(closeNaviItemAction) forControlEvents:UIControlEventTouchUpInside];
+    UIBarButtonItem *closeButtonItem = [[UIBarButtonItem alloc] initWithCustomView:closeButton];
+    
+    NSMutableArray *array = [NSMutableArray arrayWithArray:self.navigationItem.leftBarButtonItems];
+    [array addObject:closeButtonItem];
+    self.navigationItem.leftBarButtonItems = array;
+}
+
 #pragma mark - Action
 - (void)headerAction {
     [self refreshAction];
 }
 
 - (void)backAction {
-    [self.webView goBack];
+    if ([self.webView canGoBack]) {
+        [self.webView goBack];
+    }
     NSLog(@"forwardList = %@", self.webView.backForwardList.forwardList);
     NSLog(@"backList = %@", self.webView.backForwardList.backList);
     NSLog(@"currentItem = %@", self.webView.backForwardList.currentItem);
 }
 
 - (void)forwardAction {
-    [self.webView goForward];
+    if ([self.webView canGoForward]) {
+        [self.webView goForward];
+    }
 }
 
 - (void)refreshAction {
-    [self.webView reload];
+    //如果点击了好几个层级，刷新webView承载的原始页面
+    if ([self.webView canGoBack]) {
+        WKBackForwardListItem *item = self.webView.backForwardList.backList.firstObject;
+        NSURLRequest *request = [NSURLRequest requestWithURL:item.initialURL];
+        [self.webView loadRequest:request];
+    } else {
+        //刷新当前页面
+        [self.webView reload];
+    }
+}
+
+- (void)backNaviItemAction {
+    //能后退就后退，不能后退就pop
+    if ([self.webView canGoBack]) {
+        [self backAction];
+    } else {
+        [self.navigationController popViewControllerAnimated:YES];
+    }
+}
+
+- (void)closeNaviItemAction {
+    [self.navigationController popViewControllerAnimated:YES];
 }
 
 #pragma mark - observer
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary<NSKeyValueChangeKey,id> *)change context:(void *)context {
-    if ([keyPath isEqualToString:@"estimatedProgress"]) {
+    if ([keyPath isEqualToString:@"estimatedProgress"] && [object isKindOfClass:[WKWebView class]]) {
         if (self.webView.estimatedProgress == 1.0) {
             self.progressView.hidden = YES;
         }
@@ -99,6 +145,10 @@
 #pragma mark - WKNavigationDelegate
 - (void)webView:(WKWebView *)webView didFinishNavigation:(WKNavigation *)navigation {
     [self.webView.scrollView.mj_header endRefreshing];
+    
+    if ([self.webView canGoBack] && (self.navigationItem.leftBarButtonItems.count <= 1)) {
+        [self addCloseButtonItem];
+    }
 }
 
 #pragma mark - setter & getter
